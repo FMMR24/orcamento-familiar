@@ -318,6 +318,10 @@
 
   .sync-block .row-btns input[type=text]{ flex:1; min-width:140px; font:inherit; background:var(--surface-2); border:1px solid var(--hairline); border-radius:8px; padding:8px 10px; color:var(--ink); }
 
+  .scan-raw-text{ font-size:0.78rem; color:var(--muted); }
+  .scan-raw-text summary{ cursor:pointer; }
+  .scan-raw-text pre{ white-space:pre-wrap; word-break:break-word; background:var(--surface-2); border:1px solid var(--hairline); border-radius:8px; padding:8px 10px; margin-top:6px; font-family:"IBM Plex Mono", ui-monospace, monospace; font-size:0.74rem; color:var(--ink-soft); max-height:160px; overflow:auto; }
+
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
@@ -615,7 +619,8 @@
       syncStatusConnected:'Sincronizado com o código "{code}".',
       syncStatusConnecting:"A ligar…",
       syncStatusError:"Não foi possível ligar. Verifica a internet e tenta novamente.",
-      syncConfirmDisconnect:"Desligar a sincronização? Os dados continuam guardados neste aparelho, mas deixam de ser partilhados."
+      syncConfirmDisconnect:"Desligar a sincronização? Os dados continuam guardados neste aparelho, mas deixam de ser partilhados.",
+      scanRawTextLabel:"Texto detetado na foto (para conferires)"
     },
     es: {
       tagline:"Registra los ingresos y gastos de cada mes y observa cómo tu presupuesto toma forma — sin hojas de cálculo.",
@@ -701,7 +706,8 @@
       syncStatusConnected:'Sincronizado con el código "{code}".',
       syncStatusConnecting:"Conectando…",
       syncStatusError:"No se pudo conectar. Comprueba la conexión e inténtalo de nuevo.",
-      syncConfirmDisconnect:"¿Desconectar la sincronización? Los datos siguen guardados en este dispositivo, pero dejan de compartirse."
+      syncConfirmDisconnect:"¿Desconectar la sincronización? Los datos siguen guardados en este dispositivo, pero dejan de compartirse.",
+      scanRawTextLabel:"Texto detectado en la foto (para comprobar)"
     },
     en: {
       tagline:"Log your income and expenses each month and watch your budget take shape — no spreadsheets needed.",
@@ -787,7 +793,8 @@
       syncStatusConnected:'Synced with code "{code}".',
       syncStatusConnecting:"Connecting…",
       syncStatusError:"Couldn't connect. Check your internet connection and try again.",
-      syncConfirmDisconnect:"Disconnect syncing? Your data stays saved on this device but stops being shared."
+      syncConfirmDisconnect:"Disconnect syncing? Your data stays saved on this device but stops being shared.",
+      scanRawTextLabel:"Text detected in the photo (for checking)"
     }
   };
 
@@ -1936,19 +1943,37 @@
     return isNaN(n) ? 0 : n;
   }
 
+  // Lines are checked against this before the generic "total" word so a
+  // genuine match (TOTAL, TOTAL A PAGAR, VALOR A PAGAR...) always wins over
+  // a false positive like "Subtotal" or "Total de artigos".
+  var SCAN_TOTAL_LINE_RE = /total a pagar|valor a pagar|total eur|valor total|montante total|a pagar|total\b/i;
+  var SCAN_TOTAL_EXCLUDE_RE = /subtotal|total de artigos|total artigos|total itens|qtd total/i;
+
   function parseScanAmount(text){
     var lines = text.split(/\n/);
     var numRe = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/;
     var candidates = [];
-    lines.forEach(function(line){
-      var m = line.match(numRe);
-      if(!m) return;
-      var amount = parseScanLocaleNumber(m[1]);
-      if(amount <= 0) return;
+    for(var i=0; i<lines.length; i++){
+      var line = lines[i];
       var low = line.toLowerCase();
-      var isTotal = /total/.test(low) && low.indexOf("subtotal")===-1;
-      candidates.push({amount:amount, isTotal:isTotal});
-    });
+      var isTotalLine = SCAN_TOTAL_LINE_RE.test(low) && !SCAN_TOTAL_EXCLUDE_RE.test(low);
+      var m = line.match(numRe);
+      if(m){
+        var amount = parseScanLocaleNumber(m[1]);
+        if(amount > 0) candidates.push({amount:amount, isTotal:isTotalLine});
+      } else if(isTotalLine){
+        // "TOTAL" and its value sometimes land on separate OCR lines - check
+        // the next couple of lines for the first number that follows it.
+        for(var j=i+1; j<Math.min(i+3, lines.length); j++){
+          var m2 = lines[j].match(numRe);
+          if(m2){
+            var amount2 = parseScanLocaleNumber(m2[1]);
+            if(amount2 > 0) candidates.push({amount:amount2, isTotal:true});
+            break;
+          }
+        }
+      }
+    }
     var pool = candidates.filter(function(c){ return c.isTotal; });
     if(!pool.length) pool = candidates;
     if(!pool.length) return null;
@@ -2013,6 +2038,7 @@
       '<div class="scan-field"><label for="scanCategoryField">'+escapeHtml(t("scanCategoryLabel"))+'</label>'+
       '<select id="scanCategoryField">'+optsHtml+'</select></div>'+
       '<p class="scan-hint">'+escapeHtml(t("scanAddedToMonth",{month:monthLabel(state.currentMonth)}))+'</p>'+
+      '<details class="scan-raw-text"><summary>'+escapeHtml(t("scanRawTextLabel"))+'</summary><pre>'+escapeHtml(text||"")+'</pre></details>'+
       '<div class="row-btns">'+
         '<button type="button" class="btn" id="scanCancelBtn2">'+escapeHtml(t("scanCancelBtn"))+'</button>'+
         '<button type="button" class="btn ghost" id="scanRetryBtn3">'+escapeHtml(t("scanRetryBtn"))+'</button>'+

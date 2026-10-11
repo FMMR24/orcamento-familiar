@@ -1083,6 +1083,11 @@
   var syncUnsubscribe = null;
   var lastSyncedJson = null;
   var syncPushTimer = null;
+  var syncPushPending = false;
+
+  function saveStateLocalOnly(s){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }catch(e){}
+  }
 
   function loadFirebaseScripts(){
     return new Promise(function(resolve, reject){
@@ -1106,6 +1111,7 @@
   }
 
   function pushSyncNow(){
+    syncPushPending = false;
     if(!firestoreDb || !syncCode) return;
     var json = JSON.stringify(state);
     if(json === lastSyncedJson) return;
@@ -1118,8 +1124,9 @@
 
   function scheduleSyncPush(){
     if(!syncCode || !firestoreDb) return;
+    syncPushPending = true;
     clearTimeout(syncPushTimer);
-    syncPushTimer = setTimeout(pushSyncNow, 800);
+    syncPushTimer = setTimeout(pushSyncNow, 400);
   }
 
   function renderSyncUI(mode, extra){
@@ -1159,6 +1166,10 @@
       var docRef = firestoreDb.collection("households").doc(syncCode);
       syncUnsubscribe = docRef.onSnapshot(function(snap){
         if(snap.metadata.hasPendingWrites) return;
+        // A local edit is queued to be pushed - never let an incoming
+        // snapshot (which predates that edit) clobber it before it goes
+        // out. Once the pending push lands, the listener resumes normally.
+        if(syncPushPending) return;
         var data = snap.data();
         if(data && typeof data.json === "string"){
           if(data.json === lastSyncedJson) return;
@@ -1168,7 +1179,7 @@
             if(parsed && parsed.categories && parsed.months){
               parsed = migrateState(parsed);
               state = parsed;
-              saveState(state);
+              saveStateLocalOnly(state);
               render();
             }
           }catch(e){}
@@ -1188,6 +1199,8 @@
     if(syncUnsubscribe){ syncUnsubscribe(); syncUnsubscribe = null; }
     syncCode = null;
     lastSyncedJson = null;
+    clearTimeout(syncPushTimer);
+    syncPushPending = false;
     try{ localStorage.removeItem(SYNC_CODE_KEY); }catch(e){}
     renderSyncUI("idle");
   }

@@ -456,7 +456,7 @@
     <div class="ledger-card">
       <h3><span class="sw" style="background:var(--s2)"></span><span data-i18n="expenseTitle">Despesas</span>
         <button type="button" class="btn ghost scan-btn" id="scanInvoiceBtn"><span aria-hidden="true">📷</span> <span data-i18n="scanBtnLabel">Ler fatura</span></button>
-        <input type="file" accept="image/*" capture="environment" id="scanInvoiceInput" style="display:none">
+        <input type="file" accept="image/*,application/pdf" capture="environment" id="scanInvoiceInput" style="display:none">
       </h3>
       <table class="rows" id="expenseRows"></table>
       <div class="ledger-total"><span data-i18n="expenseTotalLabel">Total de despesas</span><span class="v num" id="expenseTotal">€0,00</span></div>
@@ -622,6 +622,7 @@
       scanIntro:"Tira uma foto da fatura ou escolhe uma imagem da galeria.",
       scanLoadingEngine:"A preparar o leitor de texto (só demora na primeira vez)…",
       scanLoadingOcr:"A ler a fatura…",
+      scanLoadingPdf:"A preparar o PDF (só demora na primeira vez)…",
       scanErrorGeneric:"Não foi possível ler esta imagem. Tenta outra foto ou insere os valores manualmente.",
       scanConfirmHint:"Confirma (ou corrige) o valor e a categoria antes de adicionar.",
       scanAmountLabel:"Valor", scanCategoryLabel:"Categoria",
@@ -709,6 +710,7 @@
       scanIntro:"Haz una foto de la factura o elige una imagen de la galería.",
       scanLoadingEngine:"Preparando el lector de texto (solo tarda la primera vez)…",
       scanLoadingOcr:"Leyendo la factura…",
+      scanLoadingPdf:"Preparando el PDF (solo tarda la primera vez)…",
       scanErrorGeneric:"No se pudo leer esta imagen. Prueba otra foto o introduce los valores manualmente.",
       scanConfirmHint:"Confirma (o corrige) el importe y la categoría antes de añadir.",
       scanAmountLabel:"Importe", scanCategoryLabel:"Categoría",
@@ -796,6 +798,7 @@
       scanIntro:"Take a photo of the receipt or choose an image from your gallery.",
       scanLoadingEngine:"Preparing the text reader (first time only)…",
       scanLoadingOcr:"Reading the receipt…",
+      scanLoadingPdf:"Preparing the PDF (first time only)…",
       scanErrorGeneric:"Couldn't read this image. Try another photo or enter the values manually.",
       scanConfirmHint:"Confirm (or correct) the amount and category before adding.",
       scanAmountLabel:"Amount", scanCategoryLabel:"Category",
@@ -1927,6 +1930,54 @@
     });
   }
 
+  // PDFs aren't images - Tesseract can't read them directly, so the first
+  // page is rendered to a canvas (via PDF.js, also lazy-loaded) and that
+  // rendered image is what actually gets OCR'd. Nothing from the PDF is
+  // kept afterwards; only the extracted text/amount survive.
+  var PDFJS_VERSION = "3.4.120";
+  var PDFJS_SCRIPT_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/"+PDFJS_VERSION+"/pdf.min.js";
+  var PDFJS_WORKER_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/"+PDFJS_VERSION+"/pdf.worker.min.js";
+
+  function loadPdfJsScript(){
+    return new Promise(function(resolve, reject){
+      if(window.pdfjsLib){ resolve(); return; }
+      var existing = document.querySelector('script[data-pdfjs-loader]');
+      if(existing){
+        existing.addEventListener("load", function(){ resolve(); });
+        existing.addEventListener("error", function(){ reject(new Error("load-failed")); });
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = PDFJS_SCRIPT_URL;
+      s.setAttribute("data-pdfjs-loader", "1");
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ reject(new Error("load-failed")); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function isPdfFile(file){
+    return file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
+  }
+
+  function renderPdfFirstPageToBlob(file){
+    return file.arrayBuffer().then(function(buf){
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
+      return pdfjsLib.getDocument({data: buf}).promise;
+    }).then(function(pdf){
+      return pdf.getPage(1);
+    }).then(function(page){
+      var viewport = page.getViewport({scale: 2});
+      var canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      var ctx = canvas.getContext("2d");
+      return page.render({canvasContext: ctx, viewport: viewport}).promise.then(function(){
+        return new Promise(function(resolve){ canvas.toBlob(resolve, "image/png"); });
+      });
+    });
+  }
+
   // Keyword -> category heuristics for common Portuguese merchants/utilities.
   // Deliberately simple substring matching - the user always confirms/edits
   // the result before it is saved, so false guesses are low-stakes.
@@ -2084,14 +2135,32 @@
     if(e.target.id === "scanOverlay") closeScanModal();
   });
 
+  // A hard ceiling so a stuck render/recognize step (slow device, odd PDF,
+  // flaky CDN) always surfaces an error instead of leaving the spinner on
+  // forever with no way out other than closing the modal.
+  function withTimeout(promise, ms){
+    return new Promise(function(resolve, reject){
+      var timer = setTimeout(function(){ reject(new Error("timeout")); }, ms);
+      promise.then(function(v){ clearTimeout(timer); resolve(v); }, function(e){ clearTimeout(timer); reject(e); });
+    });
+  }
+
   document.getElementById("scanInvoiceInput").addEventListener("change", function(e){
     var file = e.target.files && e.target.files[0];
     if(!file) return;
     openScanModal();
     renderScanLoading(t("scanLoadingEngine"));
-    loadTesseractScript().then(function(){
-      renderScanLoading(t("scanLoadingOcr"));
-      return Tesseract.recognize(file, "por");
+    var imageSourcePromise = isPdfFile(file)
+      ? loadPdfJsScript().then(function(){
+          renderScanLoading(t("scanLoadingPdf"));
+          return withTimeout(renderPdfFirstPageToBlob(file), 25000);
+        })
+      : Promise.resolve(file);
+    imageSourcePromise.then(function(imageSource){
+      return loadTesseractScript().then(function(){
+        renderScanLoading(t("scanLoadingOcr"));
+        return withTimeout(Tesseract.recognize(imageSource, "por"), 30000);
+      });
     }).then(function(result){
       var text = (result && result.data && result.data.text) || "";
       var amount = parseScanAmount(text);

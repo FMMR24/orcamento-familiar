@@ -316,6 +316,8 @@
   .scan-field input, .scan-field select{ font:inherit; background:var(--surface-2); border:1px solid var(--hairline); border-radius:10px; padding:9px 12px; color:var(--ink); }
   .scan-hint{ font-size:0.8rem; color:var(--muted); }
 
+  .sync-block .row-btns input[type=text]{ flex:1; min-width:140px; font:inherit; background:var(--surface-2); border:1px solid var(--hairline); border-radius:8px; padding:8px 10px; color:var(--ink); }
+
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
@@ -448,6 +450,16 @@
   <details class="data-panel" id="dataPanel">
     <summary><span class="chev">▶</span> <span data-i18n="dataPanelSummary">Dados &amp; cópia de segurança</span></summary>
     <div class="data-body">
+      <div class="data-block sync-block">
+        <h4 data-i18n="syncTitle">Partilhar com outra pessoa</h4>
+        <p data-i18n="syncDesc">Cria um código e partilha-o com quem quiseres gerir o orçamento contigo. Quem usar o mesmo código vê e edita os mesmos dados, sincronizados automaticamente.</p>
+        <div class="row-btns">
+          <input type="text" id="syncCodeInput" placeholder="código partilhado, ex.: silva2026" data-i18n-placeholder="syncCodePlaceholder" maxlength="40">
+          <button class="btn primary" id="syncConnectBtn" data-i18n="syncConnectBtn">Ligar</button>
+          <button class="btn ghost danger" id="syncDisconnectBtn" data-i18n="syncDisconnectBtn" hidden>Desligar</button>
+        </div>
+        <span class="status-msg" id="syncStatusText"></span>
+      </div>
       <div class="data-grid">
         <div class="data-block">
           <h4 data-i18n="backupTitle">Guardar cópia</h4>
@@ -595,7 +607,15 @@
       scanAmountLabel:"Valor", scanCategoryLabel:"Categoria",
       scanCategoryDefaultOption:"— escolhe uma categoria —",
       scanAddBtn:"Adicionar despesa", scanCancelBtn:"Cancelar", scanRetryBtn:"Tentar outra foto",
-      scanAddedToMonth:"Vai ser adicionado a {month}"
+      scanAddedToMonth:"Vai ser adicionado a {month}",
+      syncTitle:"Partilhar com outra pessoa",
+      syncDesc:"Cria um código e partilha-o com quem quiseres gerir o orçamento contigo. Quem usar o mesmo código vê e edita os mesmos dados, sincronizados automaticamente.",
+      syncCodePlaceholder:"código partilhado, ex.: silva2026",
+      syncConnectBtn:"Ligar", syncDisconnectBtn:"Desligar",
+      syncStatusConnected:'Sincronizado com o código "{code}".',
+      syncStatusConnecting:"A ligar…",
+      syncStatusError:"Não foi possível ligar. Verifica a internet e tenta novamente.",
+      syncConfirmDisconnect:"Desligar a sincronização? Os dados continuam guardados neste aparelho, mas deixam de ser partilhados."
     },
     es: {
       tagline:"Registra los ingresos y gastos de cada mes y observa cómo tu presupuesto toma forma — sin hojas de cálculo.",
@@ -673,7 +693,15 @@
       scanAmountLabel:"Importe", scanCategoryLabel:"Categoría",
       scanCategoryDefaultOption:"— elige una categoría —",
       scanAddBtn:"Añadir gasto", scanCancelBtn:"Cancelar", scanRetryBtn:"Probar otra foto",
-      scanAddedToMonth:"Se añadirá a {month}"
+      scanAddedToMonth:"Se añadirá a {month}",
+      syncTitle:"Compartir con otra persona",
+      syncDesc:"Crea un código y compártelo con quien quieras gestionar el presupuesto contigo. Quien use el mismo código ve y edita los mismos datos, sincronizados automáticamente.",
+      syncCodePlaceholder:"código compartido, ej.: garcia2026",
+      syncConnectBtn:"Conectar", syncDisconnectBtn:"Desconectar",
+      syncStatusConnected:'Sincronizado con el código "{code}".',
+      syncStatusConnecting:"Conectando…",
+      syncStatusError:"No se pudo conectar. Comprueba la conexión e inténtalo de nuevo.",
+      syncConfirmDisconnect:"¿Desconectar la sincronización? Los datos siguen guardados en este dispositivo, pero dejan de compartirse."
     },
     en: {
       tagline:"Log your income and expenses each month and watch your budget take shape — no spreadsheets needed.",
@@ -751,7 +779,15 @@
       scanAmountLabel:"Amount", scanCategoryLabel:"Category",
       scanCategoryDefaultOption:"— choose a category —",
       scanAddBtn:"Add expense", scanCancelBtn:"Cancel", scanRetryBtn:"Try another photo",
-      scanAddedToMonth:"Will be added to {month}"
+      scanAddedToMonth:"Will be added to {month}",
+      syncTitle:"Share with someone else",
+      syncDesc:"Create a code and share it with whoever you want to manage the budget with. Anyone using the same code sees and edits the same data, synced automatically.",
+      syncCodePlaceholder:"shared code, e.g. smith2026",
+      syncConnectBtn:"Connect", syncDisconnectBtn:"Disconnect",
+      syncStatusConnected:'Synced with code "{code}".',
+      syncStatusConnecting:"Connecting…",
+      syncStatusError:"Couldn't connect. Check your internet connection and try again.",
+      syncConfirmDisconnect:"Disconnect syncing? Your data stays saved on this device but stops being shared."
     }
   };
 
@@ -997,11 +1033,155 @@
   }
   function saveState(s){
     try{ localStorage.setItem(STORE_KEY, JSON.stringify(s)); }catch(e){}
+    scheduleSyncPush();
   }
 
   var state = loadState();
 
   function persist(){ saveState(state); render(); }
+
+  // --- Sincronização partilhada (Firestore, carregado só quando ligado) --
+
+  var FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAy1YZHDM1xsWzr8LL8V1HV8UQtxM9QXVo",
+    authDomain: "orcamento-familiar-a304c.firebaseapp.com",
+    projectId: "orcamento-familiar-a304c",
+    storageBucket: "orcamento-familiar-a304c.firebasestorage.app",
+    messagingSenderId: "808707097648",
+    appId: "1:808707097648:web:33c2b7250ab967960019f5"
+  };
+  var SYNC_CODE_KEY = "orcamentoFamiliarMensal.syncCode.v1";
+  var FIREBASE_SDK_VERSION = "10.14.1";
+  var syncCode = null;
+  var firestoreDb = null;
+  var syncUnsubscribe = null;
+  var lastSyncedJson = null;
+  var syncPushTimer = null;
+
+  function loadFirebaseScripts(){
+    return new Promise(function(resolve, reject){
+      if(window.firebase && window.firebase.firestore){ resolve(); return; }
+      var s1 = document.createElement("script");
+      s1.src = "https://www.gstatic.com/firebasejs/"+FIREBASE_SDK_VERSION+"/firebase-app-compat.js";
+      s1.onload = function(){
+        var s2 = document.createElement("script");
+        s2.src = "https://www.gstatic.com/firebasejs/"+FIREBASE_SDK_VERSION+"/firebase-firestore-compat.js";
+        s2.onload = function(){ resolve(); };
+        s2.onerror = function(){ reject(new Error("load-failed")); };
+        document.head.appendChild(s2);
+      };
+      s1.onerror = function(){ reject(new Error("load-failed")); };
+      document.head.appendChild(s1);
+    });
+  }
+
+  function normalizeSyncCode(raw){
+    return String(raw || "").trim().toLowerCase().replace(/\s+/g, "-").slice(0, 60);
+  }
+
+  function pushSyncNow(){
+    if(!firestoreDb || !syncCode) return;
+    var json = JSON.stringify(state);
+    if(json === lastSyncedJson) return;
+    lastSyncedJson = json;
+    firestoreDb.collection("households").doc(syncCode).set({
+      json: json,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function(){});
+  }
+
+  function scheduleSyncPush(){
+    if(!syncCode || !firestoreDb) return;
+    clearTimeout(syncPushTimer);
+    syncPushTimer = setTimeout(pushSyncNow, 800);
+  }
+
+  function renderSyncUI(mode, extra){
+    var input = document.getElementById("syncCodeInput");
+    var connectBtn = document.getElementById("syncConnectBtn");
+    var disconnectBtn = document.getElementById("syncDisconnectBtn");
+    var statusEl = document.getElementById("syncStatusText");
+    if(mode === "connected"){
+      input.hidden = true; connectBtn.hidden = true; disconnectBtn.hidden = false;
+      statusEl.className = "status-msg ok";
+      statusEl.textContent = t("syncStatusConnected", {code: syncCode});
+    } else if(mode === "connecting"){
+      input.hidden = false; connectBtn.hidden = false; disconnectBtn.hidden = true;
+      statusEl.className = "status-msg";
+      statusEl.textContent = t("syncStatusConnecting");
+    } else if(mode === "error"){
+      input.hidden = false; connectBtn.hidden = false; disconnectBtn.hidden = true;
+      statusEl.className = "status-msg err";
+      statusEl.textContent = t("syncStatusError");
+    } else {
+      input.hidden = false; connectBtn.hidden = false; disconnectBtn.hidden = true;
+      statusEl.className = "status-msg";
+      statusEl.textContent = "";
+    }
+  }
+
+  function connectSync(rawCode){
+    var normalized = normalizeSyncCode(rawCode);
+    if(!normalized) return;
+    renderSyncUI("connecting");
+    loadFirebaseScripts().then(function(){
+      if(!firebase.apps || !firebase.apps.length){ firebase.initializeApp(FIREBASE_CONFIG); }
+      firestoreDb = firebase.firestore();
+      syncCode = normalized;
+      try{ localStorage.setItem(SYNC_CODE_KEY, syncCode); }catch(e){}
+      if(syncUnsubscribe){ syncUnsubscribe(); }
+      var docRef = firestoreDb.collection("households").doc(syncCode);
+      syncUnsubscribe = docRef.onSnapshot(function(snap){
+        if(snap.metadata.hasPendingWrites) return;
+        var data = snap.data();
+        if(data && typeof data.json === "string"){
+          if(data.json === lastSyncedJson) return;
+          lastSyncedJson = data.json;
+          try{
+            var parsed = JSON.parse(data.json);
+            if(parsed && parsed.categories && parsed.months){
+              parsed = migrateState(parsed);
+              state = parsed;
+              saveState(state);
+              render();
+            }
+          }catch(e){}
+        } else {
+          pushSyncNow();
+        }
+      }, function(){
+        renderSyncUI("error");
+      });
+      renderSyncUI("connected");
+    }).catch(function(){
+      renderSyncUI("error");
+    });
+  }
+
+  function disconnectSync(){
+    if(syncUnsubscribe){ syncUnsubscribe(); syncUnsubscribe = null; }
+    syncCode = null;
+    lastSyncedJson = null;
+    try{ localStorage.removeItem(SYNC_CODE_KEY); }catch(e){}
+    renderSyncUI("idle");
+  }
+
+  document.getElementById("syncConnectBtn").addEventListener("click", function(){
+    connectSync(document.getElementById("syncCodeInput").value);
+  });
+  document.getElementById("syncCodeInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter"){ e.preventDefault(); connectSync(e.target.value); }
+  });
+  document.getElementById("syncDisconnectBtn").addEventListener("click", function(){
+    if(!confirm(t("syncConfirmDisconnect"))) return;
+    disconnectSync();
+  });
+
+  (function autoReconnectSync(){
+    var saved = null;
+    try{ saved = localStorage.getItem(SYNC_CODE_KEY); }catch(e){}
+    if(saved) connectSync(saved);
+  })();
 
   function ensureMonth(key){
     if(!state.months[key]) state.months[key] = {income:{}, expenses:{}};

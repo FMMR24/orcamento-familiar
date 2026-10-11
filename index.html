@@ -162,7 +162,8 @@
 
   /* ---------- toolbar ---------- */
   .toolbar{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--hairline); border-radius:16px; padding:12px 14px; box-shadow:var(--shadow); }
-  .month-switch{ display:flex; align-items:center; gap:6px; }
+  .month-switch{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; max-width:100%; }
+  .month-switch .ms-row{ display:flex; align-items:center; gap:6px; }
   .month-switch select{ font:inherit; font-weight:600; color:var(--ink); background:var(--surface-2); border:1px solid var(--hairline); border-radius:10px; padding:9px 12px; min-width:180px; }
   .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:10px; border:1px solid var(--hairline); background:var(--surface-2); color:var(--ink); cursor:pointer; }
   .icon-btn:hover{ background:var(--ring); }
@@ -191,6 +192,17 @@
   .masthead-right{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
   #langSwitch .seg-btn{ padding:5px 10px; font-size:0.76rem; }
   #yearSelect{ min-width:82px; }
+
+  @media (max-width: 520px){
+    .toolbar{ padding:10px 12px; }
+    .month-switch{ row-gap:8px; }
+    .month-switch select{ min-width:0; flex:1 1 auto; font-size:0.9rem; padding:8px 8px; }
+    #yearSelect{ min-width:90px; flex:0 1 110px; }
+    #monthSelect{ min-width:130px; }
+    .month-switch .icon-btn{ width:32px; height:32px; flex:0 0 auto; }
+    .toolbar-actions{ width:100%; }
+    .toolbar-actions .btn{ flex:1; justify-content:center; }
+  }
 
   /* ---------- KPI row ---------- */
   .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
@@ -350,20 +362,24 @@
 
   <div class="toolbar">
     <div class="month-switch">
-      <select id="yearSelect" aria-label="Selecionar ano" data-i18n-aria="yearSelectAria"></select>
-      <button class="icon-btn danger-icon" id="removeYearBtn" title="Remover ano" aria-label="Remover ano" data-i18n-title="removeYearTitle" data-i18n-aria="removeYearTitle">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
-      </button>
-      <button class="icon-btn" id="prevMonth" title="Mês anterior" aria-label="Mês anterior" data-i18n-title="prevMonth" data-i18n-aria="prevMonth">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 18-6-6 6-6"/></svg>
-      </button>
-      <select id="monthSelect" aria-label="Selecionar mês" data-i18n-aria="monthSelectAria"></select>
-      <button class="icon-btn" id="nextMonth" title="Mês seguinte" aria-label="Mês seguinte" data-i18n-title="nextMonth" data-i18n-aria="nextMonth">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg>
-      </button>
-      <button class="icon-btn danger-icon" id="removeMonthBtn" title="Remover mês" aria-label="Remover mês" data-i18n-title="removeMonthTitle" data-i18n-aria="removeMonthTitle">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
-      </button>
+      <div class="ms-row">
+        <select id="yearSelect" aria-label="Selecionar ano" data-i18n-aria="yearSelectAria"></select>
+        <button class="icon-btn danger-icon" id="removeYearBtn" title="Remover ano" aria-label="Remover ano" data-i18n-title="removeYearTitle" data-i18n-aria="removeYearTitle">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </div>
+      <div class="ms-row">
+        <button class="icon-btn" id="prevMonth" title="Mês anterior" aria-label="Mês anterior" data-i18n-title="prevMonth" data-i18n-aria="prevMonth">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <select id="monthSelect" aria-label="Selecionar mês" data-i18n-aria="monthSelectAria"></select>
+        <button class="icon-btn" id="nextMonth" title="Mês seguinte" aria-label="Mês seguinte" data-i18n-title="nextMonth" data-i18n-aria="nextMonth">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+        <button class="icon-btn danger-icon" id="removeMonthBtn" title="Remover mês" aria-label="Remover mês" data-i18n-title="removeMonthTitle" data-i18n-aria="removeMonthTitle">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+        </button>
+      </div>
     </div>
     <div class="toolbar-actions">
       <button class="btn ghost" id="copyPrevBtn" data-i18n="copyPrevBtn">Copiar valores do mês anterior</button>
@@ -1584,7 +1600,7 @@
             var val = valMap[ch.id];
             var chName = catDisplayName(ch);
             var rateTag = isSavings ? ' <input class="rate-input" type="number" step="0.01" min="0" data-rate-for="'+ch.id+'" value="'+(ch.rate!==undefined && ch.rate!==null ? ch.rate : 0)+'" title="'+t("interestRateTitle")+'">%' : '';
-            var amountInputHtml = '<input class="amt-input num" type="text" inputmode="decimal" placeholder="0,00" title="'+escapeHtml(t("amtCalcTitle"))+'" data-type="'+type+'" data-cat="'+ch.id+'" value="'+(val!==undefined && val!==null && val!=="" ? val : "")+'">';
+            var amountInputHtml = '<input class="amt-input num" type="text" inputmode="text" placeholder="0,00" title="'+escapeHtml(t("amtCalcTitle"))+'" data-type="'+type+'" data-cat="'+ch.id+'" value="'+(val!==undefined && val!==null && val!=="" ? val : "")+'">';
             var amtInner = amountInputHtml;
             if(isSavings){
               var noteVal = ensureSavingsNotes(key)[ch.id] || "";
@@ -1619,7 +1635,7 @@
           var cName2 = catDisplayName(c);
           rows += '<tr data-cat="'+c.id+'">'+
             '<td class="cat"><span class="sw" style="background:'+color+'"></span>'+escapeHtml(cName2)+'</td>'+
-            '<td class="amt"><input class="amt-input num" type="text" inputmode="decimal" placeholder="0,00" title="'+escapeHtml(t("amtCalcTitle"))+'" data-type="'+type+'" data-cat="'+c.id+'" value="'+(val2!==undefined && val2!==null && val2!=="" ? val2 : "")+'"></td>'+
+            '<td class="amt"><input class="amt-input num" type="text" inputmode="text" placeholder="0,00" title="'+escapeHtml(t("amtCalcTitle"))+'" data-type="'+type+'" data-cat="'+c.id+'" value="'+(val2!==undefined && val2!==null && val2!=="" ? val2 : "")+'"></td>'+
             '<td class="rm"><button class="row-del" data-remove-cat="'+c.id+'" data-type="'+type+'" title="'+t("removeCategoryTitle")+'" aria-label="'+escapeHtml(t("removeCategoryAria",{name:cName2}))+'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg></button></td>'+
           '</tr>';
         }
@@ -2034,7 +2050,7 @@
     document.getElementById("scanModalBody").innerHTML =
       '<p class="scan-hint">'+escapeHtml(t("scanConfirmHint"))+'</p>'+
       '<div class="scan-field"><label for="scanAmountField">'+escapeHtml(t("scanAmountLabel"))+'</label>'+
-      '<input type="text" inputmode="decimal" id="scanAmountField" value="'+(amount!==null ? String(amount) : "")+'" placeholder="0,00"></div>'+
+      '<input type="text" inputmode="text" id="scanAmountField" value="'+(amount!==null ? String(amount) : "")+'" placeholder="0,00"></div>'+
       '<div class="scan-field"><label for="scanCategoryField">'+escapeHtml(t("scanCategoryLabel"))+'</label>'+
       '<select id="scanCategoryField">'+optsHtml+'</select></div>'+
       '<p class="scan-hint">'+escapeHtml(t("scanAddedToMonth",{month:monthLabel(state.currentMonth)}))+'</p>'+

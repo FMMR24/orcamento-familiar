@@ -299,6 +299,23 @@
   footer{ text-align:center; color:var(--muted); font-size:0.8rem; padding-top:4px; }
   footer a{ color:inherit; }
 
+  .scan-btn{ margin-left:auto; font-size:0.8rem; padding:7px 11px; }
+
+  .scan-overlay{ position:fixed; inset:0; background:rgba(10,14,11,0.5); display:flex; align-items:center; justify-content:center; padding:16px; z-index:200; }
+  .scan-overlay[hidden]{ display:none; }
+  .scan-modal{ background:var(--surface); border:1px solid var(--hairline); border-radius:16px; box-shadow:var(--shadow); width:100%; max-width:420px; max-height:90vh; overflow:auto; display:flex; flex-direction:column; }
+  .scan-modal-head{ display:flex; align-items:center; justify-content:space-between; padding:16px 18px; border-bottom:1px solid var(--hairline); }
+  .scan-modal-head h3{ margin:0; font-size:1.02rem; }
+  .scan-modal-body{ padding:18px; display:flex; flex-direction:column; gap:14px; }
+  .scan-loading{ display:flex; flex-direction:column; align-items:center; gap:14px; padding:20px 0; text-align:center; color:var(--ink-soft); }
+  .scan-spinner{ width:34px; height:34px; border-radius:50%; border:3px solid var(--hairline); border-top-color:var(--brand); animation:scan-spin 0.8s linear infinite; }
+  @keyframes scan-spin{ to{ transform:rotate(360deg); } }
+  .scan-error{ color:var(--critical); font-size:0.88rem; }
+  .scan-field{ display:flex; flex-direction:column; gap:6px; }
+  .scan-field label{ font-size:0.8rem; font-weight:600; color:var(--ink-soft); }
+  .scan-field input, .scan-field select{ font:inherit; background:var(--surface-2); border:1px solid var(--hairline); border-radius:10px; padding:9px 12px; color:var(--ink); }
+  .scan-hint{ font-size:0.8rem; color:var(--muted); }
+
   @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
 </style>
 </head>
@@ -415,7 +432,10 @@
       </form>
     </div>
     <div class="ledger-card">
-      <h3><span class="sw" style="background:var(--s2)"></span><span data-i18n="expenseTitle">Despesas</span></h3>
+      <h3><span class="sw" style="background:var(--s2)"></span><span data-i18n="expenseTitle">Despesas</span>
+        <button type="button" class="btn ghost scan-btn" id="scanInvoiceBtn"><span aria-hidden="true">📷</span> <span data-i18n="scanBtnLabel">Ler fatura</span></button>
+        <input type="file" accept="image/*" capture="environment" id="scanInvoiceInput" style="display:none">
+      </h3>
       <table class="rows" id="expenseRows"></table>
       <div class="ledger-total"><span data-i18n="expenseTotalLabel">Total de despesas</span><span class="v num" id="expenseTotal">€0,00</span></div>
       <form class="add-cat" id="addExpenseCatForm">
@@ -454,6 +474,16 @@
   </details>
 
   <footer data-i18n="footerTagline">O seu orçamento mensal, sempre à mão.</footer>
+</div>
+
+<div class="scan-overlay" id="scanOverlay" hidden>
+  <div class="scan-modal">
+    <div class="scan-modal-head">
+      <h3 data-i18n="scanModalTitle">Ler fatura</h3>
+      <button type="button" class="icon-btn" id="scanCloseBtn" aria-label="Fechar" data-i18n-aria="scanCloseAria">✕</button>
+    </div>
+    <div class="scan-modal-body" id="scanModalBody"></div>
+  </div>
 </div>
 
 <script>
@@ -555,7 +585,17 @@
       defaultCatHabitacao:"Habitação", defaultCatContas:"Água, luz e internet", defaultCatAlimentacao:"Alimentação",
       defaultCatTransporte:"Transporte", defaultCatSaude:"Saúde", defaultCatSeguros:"Seguros",
       defaultCatLazer:"Lazer", defaultCatPoupanca:"Poupança", defaultCatCreditos:"Créditos", defaultCatOutras:"Outras despesas",
-      defaultChildGeral:"Geral"
+      defaultChildGeral:"Geral",
+      scanBtnLabel:"Ler fatura", scanModalTitle:"Ler fatura", scanCloseAria:"Fechar",
+      scanIntro:"Tira uma foto da fatura ou escolhe uma imagem da galeria.",
+      scanLoadingEngine:"A preparar o leitor de texto (só demora na primeira vez)…",
+      scanLoadingOcr:"A ler a fatura…",
+      scanErrorGeneric:"Não foi possível ler esta imagem. Tenta outra foto ou insere os valores manualmente.",
+      scanConfirmHint:"Confirma (ou corrige) o valor e a categoria antes de adicionar.",
+      scanAmountLabel:"Valor", scanCategoryLabel:"Categoria",
+      scanCategoryDefaultOption:"— escolhe uma categoria —",
+      scanAddBtn:"Adicionar despesa", scanCancelBtn:"Cancelar", scanRetryBtn:"Tentar outra foto",
+      scanAddedToMonth:"Vai ser adicionado a {month}"
     },
     es: {
       tagline:"Registra los ingresos y gastos de cada mes y observa cómo tu presupuesto toma forma — sin hojas de cálculo.",
@@ -623,7 +663,17 @@
       defaultCatHabitacao:"Vivienda", defaultCatContas:"Agua, luz e internet", defaultCatAlimentacao:"Alimentación",
       defaultCatTransporte:"Transporte", defaultCatSaude:"Salud", defaultCatSeguros:"Seguros",
       defaultCatLazer:"Ocio", defaultCatPoupanca:"Ahorro", defaultCatCreditos:"Créditos", defaultCatOutras:"Otros gastos",
-      defaultChildGeral:"General"
+      defaultChildGeral:"General",
+      scanBtnLabel:"Leer factura", scanModalTitle:"Leer factura", scanCloseAria:"Cerrar",
+      scanIntro:"Haz una foto de la factura o elige una imagen de la galería.",
+      scanLoadingEngine:"Preparando el lector de texto (solo tarda la primera vez)…",
+      scanLoadingOcr:"Leyendo la factura…",
+      scanErrorGeneric:"No se pudo leer esta imagen. Prueba otra foto o introduce los valores manualmente.",
+      scanConfirmHint:"Confirma (o corrige) el importe y la categoría antes de añadir.",
+      scanAmountLabel:"Importe", scanCategoryLabel:"Categoría",
+      scanCategoryDefaultOption:"— elige una categoría —",
+      scanAddBtn:"Añadir gasto", scanCancelBtn:"Cancelar", scanRetryBtn:"Probar otra foto",
+      scanAddedToMonth:"Se añadirá a {month}"
     },
     en: {
       tagline:"Log your income and expenses each month and watch your budget take shape — no spreadsheets needed.",
@@ -691,7 +741,17 @@
       defaultCatHabitacao:"Housing", defaultCatContas:"Water, electricity & internet", defaultCatAlimentacao:"Groceries",
       defaultCatTransporte:"Transport", defaultCatSaude:"Health", defaultCatSeguros:"Insurance",
       defaultCatLazer:"Leisure", defaultCatPoupanca:"Savings", defaultCatCreditos:"Loans & credit", defaultCatOutras:"Other expenses",
-      defaultChildGeral:"General"
+      defaultChildGeral:"General",
+      scanBtnLabel:"Scan receipt", scanModalTitle:"Scan receipt", scanCloseAria:"Close",
+      scanIntro:"Take a photo of the receipt or choose an image from your gallery.",
+      scanLoadingEngine:"Preparing the text reader (first time only)…",
+      scanLoadingOcr:"Reading the receipt…",
+      scanErrorGeneric:"Couldn't read this image. Try another photo or enter the values manually.",
+      scanConfirmHint:"Confirm (or correct) the amount and category before adding.",
+      scanAmountLabel:"Amount", scanCategoryLabel:"Category",
+      scanCategoryDefaultOption:"— choose a category —",
+      scanAddBtn:"Add expense", scanCancelBtn:"Cancel", scanRetryBtn:"Try another photo",
+      scanAddedToMonth:"Will be added to {month}"
     }
   };
 
@@ -1641,6 +1701,184 @@
     cat.children.push(child);
     persist();
   }
+
+  // --- Leitura de faturas (OCR local, carregado só quando usado) ---------
+
+  var TESSERACT_CDN_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+
+  function loadTesseractScript(){
+    return new Promise(function(resolve, reject){
+      if(window.Tesseract){ resolve(); return; }
+      var existing = document.querySelector('script[data-tesseract-loader]');
+      if(existing){
+        existing.addEventListener("load", function(){ resolve(); });
+        existing.addEventListener("error", function(){ reject(new Error("load-failed")); });
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = TESSERACT_CDN_URL;
+      s.setAttribute("data-tesseract-loader", "1");
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ reject(new Error("load-failed")); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // Keyword -> category heuristics for common Portuguese merchants/utilities.
+  // Deliberately simple substring matching - the user always confirms/edits
+  // the result before it is saved, so false guesses are low-stakes.
+  var SCAN_CATEGORY_KEYWORDS = {
+    exp_alim: ["continente","pingo doce","pingo-doce","lidl","aldi","auchan","mercadona","minipreco","minipreço","intermarche","intermarché","supermercado","hipermercado","froiz","leclerc","meu super","spar "],
+    exp_contas: ["edp","galp power","endesa","iberdrola","meo ","nos ","nowo","vodafone","água","aguas de","epal","smas","fatura de eletricidade","fatura de água","internet"],
+    exp_transp: ["galp","repsol","bp ","cepsa","prio","via verde","cp ","metro","uber","bolt","flixbus","parque","estacionamento","portagem","combustível","combustivel"],
+    exp_saude: ["farmacia","farmácia","clinica","clínica","hospital","centro de saude","centro de saúde","dentista"],
+    exp_casa: ["condominio","condomínio","obras","ferragens","leroy merlin","aki ","ikea","maxmat"],
+    exp_lazer: ["cinema","teatro","restaurante","cafe","café","pastelaria","netflix","spotify","bilheteira"]
+  };
+
+  function guessScanCategoryId(text){
+    var low = text.toLowerCase();
+    var bestId = null, bestScore = 0;
+    Object.keys(SCAN_CATEGORY_KEYWORDS).forEach(function(catId){
+      var score = 0;
+      SCAN_CATEGORY_KEYWORDS[catId].forEach(function(kw){ if(low.indexOf(kw)!==-1) score++; });
+      if(score > bestScore){ bestScore = score; bestId = catId; }
+    });
+    return bestId;
+  }
+
+  function parseScanLocaleNumber(str){
+    str = str.trim();
+    var lastComma = str.lastIndexOf(","), lastDot = str.lastIndexOf(".");
+    if(lastComma > lastDot){ str = str.replace(/\./g, "").replace(",", "."); }
+    else if(lastDot > -1){ str = str.replace(/,/g, ""); }
+    var n = parseFloat(str);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function parseScanAmount(text){
+    var lines = text.split(/\n/);
+    var numRe = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/;
+    var candidates = [];
+    lines.forEach(function(line){
+      var m = line.match(numRe);
+      if(!m) return;
+      var amount = parseScanLocaleNumber(m[1]);
+      if(amount <= 0) return;
+      var low = line.toLowerCase();
+      var isTotal = /total/.test(low) && low.indexOf("subtotal")===-1;
+      candidates.push({amount:amount, isTotal:isTotal});
+    });
+    var pool = candidates.filter(function(c){ return c.isTotal; });
+    if(!pool.length) pool = candidates;
+    if(!pool.length) return null;
+    return pool.reduce(function(best, c){ return c.amount > best.amount ? c : best; }, pool[0]).amount;
+  }
+
+  function addScannedExpense(catId, amount){
+    var cat = state.categories.expense.find(function(c){ return c.id===catId; });
+    if(!cat) return;
+    var m = ensureMonth(state.currentMonth);
+    if(cat.children){
+      var child = cat.children[0];
+      if(!child){
+        child = {id: catId+"_"+uid(), name: t("defaultChildGeral")};
+        cat.children.push(child);
+      }
+      m.expenses[child.id] = (Number(m.expenses[child.id]) || 0) + amount;
+    } else {
+      m.expenses[catId] = (Number(m.expenses[catId]) || 0) + amount;
+    }
+    persist();
+  }
+
+  function scanExpenseCategoryOptions(){
+    return state.categories.expense.filter(function(c){ return c.id !== "exp_poup"; });
+  }
+
+  function openScanModal(){
+    document.getElementById("scanOverlay").hidden = false;
+  }
+  function closeScanModal(){
+    document.getElementById("scanOverlay").hidden = true;
+    document.getElementById("scanModalBody").innerHTML = "";
+  }
+
+  function renderScanLoading(message){
+    document.getElementById("scanModalBody").innerHTML =
+      '<div class="scan-loading"><div class="scan-spinner" aria-hidden="true"></div><div>'+escapeHtml(message)+'</div></div>';
+  }
+
+  function renderScanError(message){
+    document.getElementById("scanModalBody").innerHTML =
+      '<div class="scan-error">'+escapeHtml(message)+'</div>'+
+      '<div class="row-btns"><button type="button" class="btn" id="scanRetryBtn2">'+escapeHtml(t("scanRetryBtn"))+'</button></div>';
+    document.getElementById("scanRetryBtn2").addEventListener("click", function(){
+      closeScanModal();
+      document.getElementById("scanInvoiceInput").click();
+    });
+  }
+
+  function renderScanConfirm(amount, guessedCatId, text){
+    var options = scanExpenseCategoryOptions();
+    var optsHtml = '<option value="">'+escapeHtml(t("scanCategoryDefaultOption"))+'</option>' +
+      options.map(function(c){
+        var selected = (c.id===guessedCatId) ? " selected" : "";
+        return '<option value="'+c.id+'"'+selected+'>'+escapeHtml(catDisplayName(c))+'</option>';
+      }).join("");
+    document.getElementById("scanModalBody").innerHTML =
+      '<p class="scan-hint">'+escapeHtml(t("scanConfirmHint"))+'</p>'+
+      '<div class="scan-field"><label for="scanAmountField">'+escapeHtml(t("scanAmountLabel"))+'</label>'+
+      '<input type="text" inputmode="decimal" id="scanAmountField" value="'+(amount!==null ? String(amount) : "")+'" placeholder="0,00"></div>'+
+      '<div class="scan-field"><label for="scanCategoryField">'+escapeHtml(t("scanCategoryLabel"))+'</label>'+
+      '<select id="scanCategoryField">'+optsHtml+'</select></div>'+
+      '<p class="scan-hint">'+escapeHtml(t("scanAddedToMonth",{month:monthLabel(state.currentMonth)}))+'</p>'+
+      '<div class="row-btns">'+
+        '<button type="button" class="btn" id="scanCancelBtn2">'+escapeHtml(t("scanCancelBtn"))+'</button>'+
+        '<button type="button" class="btn ghost" id="scanRetryBtn3">'+escapeHtml(t("scanRetryBtn"))+'</button>'+
+        '<button type="button" class="btn primary" id="scanConfirmAddBtn">'+escapeHtml(t("scanAddBtn"))+'</button>'+
+      '</div>';
+    document.getElementById("scanCancelBtn2").addEventListener("click", closeScanModal);
+    document.getElementById("scanRetryBtn3").addEventListener("click", function(){
+      closeScanModal();
+      document.getElementById("scanInvoiceInput").click();
+    });
+    document.getElementById("scanConfirmAddBtn").addEventListener("click", function(){
+      var catId = document.getElementById("scanCategoryField").value;
+      var val = evalAmount(document.getElementById("scanAmountField").value);
+      if(!catId || val===null || val<=0) return;
+      addScannedExpense(catId, val);
+      closeScanModal();
+    });
+  }
+
+  document.getElementById("scanInvoiceBtn").addEventListener("click", function(){
+    document.getElementById("scanInvoiceInput").value = "";
+    document.getElementById("scanInvoiceInput").click();
+  });
+
+  document.getElementById("scanCloseBtn").addEventListener("click", closeScanModal);
+  document.getElementById("scanOverlay").addEventListener("click", function(e){
+    if(e.target.id === "scanOverlay") closeScanModal();
+  });
+
+  document.getElementById("scanInvoiceInput").addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    openScanModal();
+    renderScanLoading(t("scanLoadingEngine"));
+    loadTesseractScript().then(function(){
+      renderScanLoading(t("scanLoadingOcr"));
+      return Tesseract.recognize(file, "por");
+    }).then(function(result){
+      var text = (result && result.data && result.data.text) || "";
+      var amount = parseScanAmount(text);
+      var catId = guessScanCategoryId(text);
+      renderScanConfirm(amount, catId, text);
+    }).catch(function(){
+      renderScanError(t("scanErrorGeneric"));
+    });
+  });
 
   document.getElementById("addIncomeCatForm").addEventListener("submit", function(e){
     e.preventDefault();
